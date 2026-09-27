@@ -1,0 +1,26 @@
+{
+  "kind": "univ4_hook",
+  "hook": {
+    "contract": "GasPriceFeeHook",
+    "constructorArgs": [
+      "0xe03a1074c86cfedd5c142c4f04f1a1536e203543"
+    ],
+    "permissions": [
+      "afterSwap",
+      "afterSwapReturnDelta"
+    ]
+  },
+  "token": {
+    "contract": "GASP",
+    "name": "Gas Tax",
+    "symbol": "GASP",
+    "decimals": 18
+  },
+  "pool": {
+    "pairedCurrency": "0x0000000000000000000000000000000000000000",
+    "fee": 3000,
+    "tickSpacing": 60,
+    "initialPrice": "79228162514264337593543950336000"
+  },
+  "notes": "Gas Tax (GASP) with GasPriceFeeHook: a Sepolia-only univ4_hook launch, site label lab-gas-price-fee-hook. This manifest is a technical description of the accepted source; supply split, allocations, owners, chain and gas ceilings come from the separately versioned launch policy, not from here.\n\nHOOK. src/GasPriceFeeHook.sol:GasPriceFeeHook extends the vendored v4-periphery BaseHook. Its only constructor argument is the IPoolManager: the Sepolia PoolManager 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543 (checksummed form of constructorArgs[0]); a zero address reverts. getHookPermissions() returns exactly afterSwap and afterSwapReturnDelta (address mask 0x0044: bits 6 and 2); the other twelve flags are false, so initialisation, liquidity changes and donations never call the hook and the factory's initialisation and one-sided seed cannot be reverted by it. Rule in _afterSwap: tip = tx.gasprice - block.basefee; a swap is high tier and pays a 300 bps (3%) hook fee when tx.gasprice > 2 x block.basefee AND tip >= 3 gwei (constant MIN_TIP), otherwise 30 bps (0.3%); zero base fee or gasprice <= basefee is low tier. feeBpsFor(gasPrice, baseFee) is the pure form of this rule. The fee is charged on the unspecified currency of the actual swap delta (exact input: off the output; exact output: added to the input): fee = ceil(|unspecified| x bps / 10000), capped at |unspecified|, on top of the pool's static 0.3% LP fee. It is returned as the afterSwap delta and minted to the hook as ERC-6909 claims with poolManager.mint inside the callback; no ETH or tokens move during a swap, so the first buy into an ETH-less pool needs no hook ETH balance. State is keyed by PoolId (accrued(poolId) -> amount0, amount1); any pool may attach the hook. donateFees(PoolKey) is permissionless: it unlocks the PoolManager, burns that pool's accrued claims in both currencies and donates them to in-range LPs via poolManager.donate; it reverts NoLiquidity while in-range liquidity is zero and the claims wait. unlockCallback accepts only the PoolManager and only during an unlock the hook itself started. Events FeeCharged(poolId indexed, sender, highTier, gasPrice, baseFee, currency, fee) and FeesDonated(poolId indexed, amount0, amount1). No owner, admin, configurable rate, proxy, delegatecall, selfdestruct, external oracle or token allowlist. hookData is ignored and unauthenticated; FeeCharged.sender is the router, not a wallet. Documented limit: tx.gasprice is sender-chosen, so only public priority bidding is taxed; private bundles with a low tip plus a coinbase payment avoid the high tier.\n\nTOKEN. src/GASP.sol:GASP is an OpenZeppelin ERC-20 named Gas Tax, symbol GASP, 18 decimals, no constructor arguments. Its constructor mints the source-constant fixed supply once to msg.sender (the factory); no mint, burn, owner, pause, transfer tax or upgrade path.\n\nPOOL. currency0 native ETH (pairedCurrency zero address), currency1 GASP, static LP fee 3000 (0.3%, not a dynamic-fee key), tickSpacing 60. initialPrice is sqrtPriceX96 = 1000 x 2^96 = 79228162514264337593543950336000, an opening price of 1,000,000 GASP per ETH (tick about 138162), within TickMath bounds. The factory seeds GASP-only liquidity in a range below this price, so the first buy (zeroForOne, ETH in, GASP out) executes against a pool holding no ETH and its hook fee is taken from the GASP output. Seed amounts and ranges are policy and factory inputs.\n\nBUILD AND EVIDENCE. Solidity 0.8.26, cancun, optimizer 200 runs, via_ir, bytecode_hash none; dependencies vendored under lib/ with pins and hashes in docs/. ABIs: docs/abi/GASP.json and docs/abi/GasPriceFeeHook.json. Local checks: forge build and forge test (unit, fuzz and invariant suites against a real PoolManager, including the ETH-less launch rehearsal), plus the protected hook and token floor re-run against the creation code with flags 0x44 and decimals 18. Local results are review evidence, not attestation or admission."
+}
